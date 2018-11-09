@@ -14,42 +14,34 @@ using std::endl;;
 using namespace Eigen;
 
 int gen = 0;
-int N_GEN = 10;
-int N_POP = 30;
+int N_GEN = 100;
+int N_POP = 50;
 int N_SPLINE = 3;
+int N_FINE_SPLINE = 10;
 int N_PTS = N_SPLINE * 2 + 1;
 int N_JOINT = 2;
 int N_ELITES = 1;
 int N_TOURNAMENT = 3;
-int const N_LAYERS = 5;
-int AGE_GAP = 3;
+int N_LAYERS = 5;
 int MAX_AGE[5] = {3, 6, 12, 24, 48};
-double P_MUT = 0.3;
-//double diversity_alpha = 0.5;
-//double diversity_thresh = 1.0;
+double P_MUT = 0.7;
+double RATE_OVERAGE = 0.2;
 
-Robot robot[2];
 vector<Individual> pops1[5];
 vector<Individual> pops2[5];
-//vector<Individual> pop2;
 
 // -----------------------------------------------
 // CREATE INITIAL POPULATION
 // -----------------------------------------------
 
-vector<Individual> createInitialPop(vector<double>start, vector<double>goal, int robotID){
+vector<Individual> createInitialPop(int robotID, int num){
 
-    vector<Individual> pop(N_POP);
+    vector<Individual> pop(num);
 
     //Create population
-    for (int i=0; i<N_POP; i++){
+    for (int i=0; i<num; i++){
         Individual ind;
-        ind.path = createPath(start, goal);
-        ind.fitness = 0.0;
-        ind.distance = 0.0;
-        ind.collision = 0;
-        ind.diversity = 0.0;
-        ind.age = 0;
+        ind.path = createPath(robot[robotID].Start, robot[robotID].Goal);
         ind.robotID = robotID;
         pop[i] = ind;
     }
@@ -96,23 +88,46 @@ vector<vector<double>> createPath(vector<double>start, vector<double>goal){
 // EVALUATION
 // -----------------------------------------------
 
-void evaluate(vector<Individual>&pop1, const vector<Individual> pop2){
+void evaluate(vector<Individual>&pop, vector<Individual> competitors[]){
+    int num = pop.size();
+    vector<Individual> best_inds;
 
-    Individual best_ind = pop2[0];
-    int num = pop1.size();
-    calcDiversity(pop1);
+    for (int i=0; i<N_LAYERS; i++) {
+        if (competitors[i].size()!=0) best_inds.push_back(competitors[i][0]);
+    };
+
+    //calcDiversity(pop);
     for (int i=0; i<num; i++) {
-        if (pop1[i].fitness == 0.0){
-            pop1[i].distance = calcPathLength(pop1[i].path) + calcPathLength(best_ind.path);
-            pop1[i].collision = calcCollision(pop1[i], best_ind);
-            pop1[i].fitness = (pop1[i].distance + pop1[i].collision * 100);
+        //pop1[i].distance = calcPathLength(pop[i].path);
+        pop[i].distance = calcTravelLength(pop[i]);
+        pop[i].fitness = 1e6;
+        for(Individual best_ind: best_inds){
+            int best_collision = calcCollision(pop[i], best_ind);
+            double best_distance = std::max(pop[i].distance, best_ind.distance);
+            double best_fitness = best_distance + best_collision*10.0;
+            if (best_fitness < pop[i].fitness){
+                pop[i].collision = best_collision;
+                pop[i].fitness = best_fitness;
+            }
         }
-        pop1[i].age += 1;
+        //pop[i].subfitness = calcSubFitness(pop[i], competitors);
     }
-
 }
 
-double calcPathLength(vector<vector<double>> path){
+double calcSubFitness(Individual &ind, vector<Individual>&competitors){
+    double subFitness=0.0;
+    int num=competitors.size();
+
+    for (int i=0; i<num; i++){
+        if (ind.fitness < competitors[i].fitness){
+            subFitness += 1.0;
+        }
+    }
+    subFitness = (double)subFitness / num;
+    return subFitness;
+}
+
+double calcPathLength(vector<vector<double>> &path){
     double distance=0.0;
     int num=path.size();
 
@@ -123,11 +138,27 @@ double calcPathLength(vector<vector<double>> path){
     return distance;
 }
 
-int calcCollision(Individual ind1, Individual ind2){
+double calcTravelLength(Individual &ind){
+    vector<vector<double>> travel;
+    double distance=0.0;
+    vector<vector<double>> path = ferguson_spline(ind.path, N_FINE_SPLINE);
 
-    vector<vector<double>> spline1 = ferguson_spline(ind1.path, 10);
-    vector<vector<double>> spline2 = ferguson_spline(ind2.path, 10);
+    int num=path.size();
+    for (int i=0; i<num; i++){
+        vector<vector<double>> config = robot[ind.robotID].forward_kinematics(path[i]);
+        travel.push_back(config.back());
+        if (i>0){
+            distance += calcDistance(travel[i-1], travel[i]);
+        }
+    }
+    return distance;
+}
 
+int calcCollision(Individual &ind1, Individual &ind2){
+    int DIV = 10;
+    vector<vector<double>> spline1 = ferguson_spline(ind1.path, DIV);
+    vector<vector<double>> spline2 = ferguson_spline(ind2.path, DIV);
+    vector<double> cp;
     vector<vector<double>> config1, config2;
     vector<vector<double>> line1, line2;
     vector<double> pt1, pt2;
@@ -135,37 +166,58 @@ int calcCollision(Individual ind1, Individual ind2){
     int collision_counter=0;
 
     for (int i=0; i<num; i++){
-
         config1 = robot[ind1.robotID].forward_kinematics(spline1[i]);
         config2 = robot[ind2.robotID].forward_kinematics(spline2[i]);
-
         // Line pair.
         for (int j=0; j<N_JOINT; j++){
             for (int k=0; k<N_JOINT; k++){
                 line1={config1[j], config1[j+1]};
                 line2={config2[k], config2[k+1]};
-
                 // If rough check is true.
                 if (isCollisionRoughCheck(line1, line2)){
                     // Line-Line check.
                     if (isCollisionLineLine(line1, line2)){
                         collision_counter += 1;
+                        cp.push_back(i);
                         goto NEXT;
                     }
                     // Line-Circle check
-                    if (isCollisionLineCircle(line1, line2[1], 0.1)){
+                    if (isCollisionLineCircle(line1, line2[0], 1.0)){
                         collision_counter += 1;
+                        cp.push_back(i);
                         goto NEXT;
                     }
                     // Line-Circle check
-                    if (isCollisionLineCircle(line2, line1[1], 0.1)){
+                    if (isCollisionLineCircle(line1, line2[1], 1.0)){
                         collision_counter += 1;
+                        cp.push_back(i);
                         goto NEXT;
                     }
+                    // Line-Circle check
+                    if (isCollisionLineCircle(line2, line1[0], 1.0)){
+                        collision_counter += 1;
+                        cp.push_back(i);
+                        goto NEXT;
+                    }
+                    // Line-Circle check
+                    if (isCollisionLineCircle(line2, line1[1], 1.0)){
+                        collision_counter += 1;
+                        cp.push_back(i);
+                        goto NEXT;
+                    }
+
                 }
             }
         }
         NEXT:;
+    }
+
+    if (cp.size() == 0){
+        ind1.collision_points[0] = -1;
+        ind1.collision_points[1] = -1;
+    }else{
+        ind1.collision_points[0] = (int)cp[0]/DIV;
+        ind1.collision_points[1] = (int)cp[cp.size()-1]/DIV + 1;
     }
 
     return collision_counter;
@@ -190,17 +242,16 @@ void sort_pop(vector<Individual> &pop){
 // -----------------------------------------------
 
 
-vector<Individual> tournamentSelection(vector<Individual> const &pop){
+vector<Individual> tournamentSelection(vector<Individual> const &pop, int n_offspring, int n_tournament){
 
-    int n_offspring = N_POP - N_ELITES;
     vector<Individual> offspring(n_offspring);
     int rand_index;
     int min_index;
 
     for(int i=0; i<n_offspring; i++){
-        min_index = N_POP;
-        for (int j=0; j<N_TOURNAMENT; j++){
-            rand_index = get_rand_range_int(0, N_POP-1);
+        min_index = pop.size();
+        for (int j=0; j<n_tournament; j++){
+            rand_index = get_rand_range_int(0, pop.size()-1);
             if (rand_index < min_index) min_index = rand_index;
         }
         offspring[i] = pop[min_index];
@@ -209,15 +260,15 @@ vector<Individual> tournamentSelection(vector<Individual> const &pop){
     return offspring;
 }
 
-vector<Individual> rouletteSelection(vector<Individual> &pop){
+vector<Individual> rouletteSelection(vector<Individual> &pop, int n_offspring){
 
-    int n_offspring = N_POP - N_ELITES;
     vector<Individual> offspring;
     vector<double> rand_list(n_offspring);
 
     // Calculate sum of the fitness over all population.
     double sum_fitness = std::accumulate(pop.begin(), pop.end(), 0.0,
-                     [](double sum, Individual& ind ){ return sum+1.0/ind.fitness; } );
+                     //[](double sum, Individual& ind ){ return sum+1.0/ind.subfitness; } );
+                     [](double sum, Individual& ind ){ return sum+ ind.subfitness; } );
 
     // Generate random list.
     for (int i=0; i<n_offspring; i++){
@@ -229,12 +280,13 @@ vector<Individual> rouletteSelection(vector<Individual> &pop){
     std::reverse(rand_list.begin(), rand_list.end());
 
     double thresh = 0.0;
-    for (int i=0; i<N_POP; i++){
-        thresh += 1.0/pop[i].fitness;
+    for (Individual ind: pop){
+        thresh += ind.subfitness;
+        //thresh += 1.0/ind.fitness;
         while(rand_list.size()!=0){
             double rand = rand_list.back();
             if (rand<thresh){
-                offspring.push_back(pop[i]);
+                offspring.push_back(ind);
                 rand_list.pop_back();
             }else{
                 break;
@@ -244,36 +296,95 @@ vector<Individual> rouletteSelection(vector<Individual> &pop){
     return offspring;
 }
 
-vector<Individual> elitistSelection(vector<Individual> const &pop){
-    vector<Individual> elites(N_ELITES);
+vector<Individual> elitistSelection(vector<Individual> const &pop, int n_elites){
+    vector<Individual> elites(n_elites);
     for (int i=0; i<N_ELITES; i++) elites[i] = pop[i];
     return elites;
 }
 
-vector<Individual> overageSelection(vector<Individual>offspring&){
+vector<Individual> overageSelection(vector<Individual>&offspring, int id){
     vector<Individual> overages;
-
-    for (Individual ind:offspring){
-        if(ind.age > MAX_AGE[id]){
-
+    int num=offspring.size();
+    for (int i=num-1; i>=0; i--){
+        if(offspring[i].age > MAX_AGE[id]){
+            overages.insert(overages.begin(), offspring[i]);
+            offspring.erase(offspring.begin()+i);
         }
     }
+    return overages;
+}
 
+void agelayeredSelection(vector<Individual>pops[]){
+
+    vector<Individual> overages[N_LAYERS];
+    vector<Individual> elites(N_ELITES);
+
+    for (int id=0; id<N_LAYERS; id++){
+
+        if (id != N_LAYERS-1){
+            overages[id+1] = overageSelection(pops[id], id);
+        }
+
+        int M = N_POP*(1.0 - RATE_OVERAGE);
+        int N = N_POP*RATE_OVERAGE;
+        int m = pops[id].size();
+        int n = overages[id].size();
+
+        if (m < M && n < N){
+            pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
+
+        }else if(m < M && n > N){
+            N = N_POP - m;
+            if (N < n){
+                elites = elitistSelection(overages[id], N_ELITES);
+                //overages[id] = rouletteSelection(overages[id], N - N_ELITES);
+                overages[id] = tournamentSelection(overages[id], N - N_ELITES, N_TOURNAMENT);
+                overages[id].insert(overages[id].end(), elites.begin(), elites.end());
+            }
+            pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
+
+        }else if(m > M && n < N){
+            M = N_POP - n;
+            if (M < m){
+                elites = elitistSelection(pops[id], N_ELITES);
+                //pops[id] = rouletteSelection(pops[id], M - N_ELITES);
+                pops[id] = tournamentSelection(pops[id], M - N_ELITES, N_TOURNAMENT);
+                pops[id].insert(pops[id].end(), elites.begin(), elites.end());
+            }
+            pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
+
+        }else if (m >= M && n >= N){
+            elites = elitistSelection(pops[id], N_ELITES);
+            //pops[id] = rouletteSelection(pops[id], M - N_ELITES);
+            pops[id] = tournamentSelection(pops[id], M - N_ELITES, N_TOURNAMENT);
+            pops[id].insert(pops[id].end(), elites.begin(), elites.end());
+
+            elites = elitistSelection(overages[id], N_ELITES);
+            //overages[id] = rouletteSelection(overages[id], N - N_ELITES);
+            overages[id] = tournamentSelection(overages[id], N - N_ELITES, N_TOURNAMENT);
+            overages[id].insert(overages[id].end(), elites.begin(), elites.end());
+
+            pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
+        }
+
+        ofs_log << "TOTAL NUM OF POPULATION: " << pops[id].size() << endl;
+        ofs_log << "AGES: " << endl;
+        for (Individual ind:pops[id]) ofs_log << ind.age << " "; ofs_log << endl;
+    }
 }
 
 // -----------------------------------------------
 // MUTATION
 // -----------------------------------------------
 
-void mutation(
-    std::function<Individual(Individual&)> mut_operator, vector<Individual> &pop){
-    vector<Individual> add_pop;
-    int num = pop.size();
-    for (int i=0; i<num; i++){
-        if (get_rand_range_dbl(0.0, 1.0) < P_MUT){
-            Individual child = mut_operator(pop[i]);
-            add_pop.insert(add_pop.end(), child);
-        }
+void mutation(vector<Individual> &pop){
+    //vector<Individual> add_pop;
+    //int num = pop.size();
+    //for (int i=0; i<num; i++){
+        //if (get_rand_range_dbl(0.0, 1.0) < P_MUT){
+            //Individual child = mut_operator(pop[i]);
+            //add_pop.insert(add_pop.end(), child);
+        //}
 
         //for(int j=0; j<5; j++){
         //    double p = pow(1.0 - P_MUT, j) * P_MUT;
@@ -281,48 +392,73 @@ void mutation(
         //        mut_operator(pop[i]);
         //    }
         //}
-    }
-    pop.insert(pop.end(), add_pop.begin(), add_pop.end());
-}
+    //}
+    //pop.insert(pop.end(), add_pop.begin(), add_pop.end());
 
-Individual mutNormal(Individual ind){
-
-    for (int i=0; i<N_PTS-1; i++){
-        if (get_rand_range_dbl(0.0, 1.0) < 0.3){
-            ind.path[i][0] += get_rand_range_dbl(-0.1, 0.1);
-            ind.path[i][1] += get_rand_range_dbl(-0.1, 0.1);
+    int num = pop.size();
+    for (int i=0; i<num; i++){
+        if (get_rand_range_dbl(0.0, 1.0) < P_MUT){
+            //mutHillclimb(pop[i]);
+            mutNormal(pop[i]);
         }
     }
-    Individual child = {ind.path, 0.0, 0.0, 0, 0.0, ind.age, ind.robotID};
+}
+
+void mutHillclimb(Individual &ind){
+    int index = get_rand_range_int(1, N_PTS-2);
+    double theta = get_rand_range_dbl(-PI, PI);
+    for (int i=0; i<30; i++){
+        ind.path[index][0] += 0.1 * cos(theta);
+        ind.path[index][1] += 0.1 * sin(theta);
+        if (ind.distance < calcPathLength(ind.path)){
+            break;
+        }
+    }
+}
+
+void mutNormal(Individual &ind){
+    std::normal_distribution<> dist(0.0, 0.1);
+    int rand_int = get_rand_range_int(1, N_PTS-2);
+    //for (int i=0; i<N_PTS-1; i++){
+        //if (get_rand_range_dbl(0.0, 1.0) < 0.3){
+            //ind.path[i][0] += get_rand_range_dbl(-0.1, 0.1);
+            //ind.path[i][1] += get_rand_range_dbl(-0.1, 0.1);
+    ind.path[rand_int][0] += dist(mt_engine);
+    ind.path[rand_int][1] += dist(mt_engine);
+        //}
+    //}
+
+    //Individual child;
+    //child.path = ind.path; child.age = ind.age; child.robotID = ind.robotID;
     //path_check(ind, "mut0");
     //path_check(child, "mut1");
-    return child;
+    //return child;
 }
 
 // -----------------------------------------------
 // CROSSOVER
 // -----------------------------------------------
 
-void crossover(std::function< vector<Individual>(Individual&, vector<Individual>&) > cx_operator,
-               vector<Individual> &pop){
+void crossover(vector<Individual> &pop1, const vector<Individual> &pop2){
 
-    int num = pop.size();
+    int num = pop1.size();
     vector<Individual> add_pop;
     //std::shuffle(pop.begin(), pop.end(), mt_engine);
     for(int i=0; i<num; i++){
-        vector<Individual> children = cx_operator(pop[i], pop);
+        vector<Individual> children = oneptcx(pop1[i], pop2);
         if (children.size()!=0){
             add_pop.insert(add_pop.end(), children.begin(), children.end());
         }
     }
+    pop1 = add_pop;
+    //pop1.insert(pop1.end(), add_pop.begin(), add_pop.end());
 
-    pop.insert(pop.end(), add_pop.begin(), add_pop.end());
-    adjust_num_pts(pop);
+    adjust_num_pts(pop1);
 
 }
 
 // --- Single-point crossover
-vector<Individual> oneptcx(Individual &ind1, vector<Individual> &pop){
+vector<Individual> oneptcx(Individual &ind1, const vector<Individual> &pop){
     int cut_pt1 = get_rand_range_int(1, N_PTS-2);
     int cut_pt2;
     vector<double> pt1 = ind1.path[cut_pt1];
@@ -330,13 +466,20 @@ vector<Individual> oneptcx(Individual &ind1, vector<Individual> &pop){
     Individual ind2;
     vector<Individual> children;
 
-
     // Search the nearest point.
-    double min_dist=PI/10.0;
+    double min_dist=PI/5;
     int num=pop.size();
     for (int i=0; i<num; i++){
-        if (pop[i].distance == ind1.distance) continue;
-        for (int j=0; j<N_PTS; j++){
+
+        double sum = 0;
+        for (int k=0; k<N_PTS; k++){
+            vector<double> v1 = pop[i].path[k];
+            vector<double> v2 = ind1.path[k];
+            sum += calcDistance(v1, v2);
+        }
+        if (sum < 3.0) continue;
+
+        for (int j=1; j<N_PTS-1; j++){
             pt2 = pop[i].path[j];
             double dist = calcDistance(pt1, pt2);
             if (dist < min_dist){
@@ -357,24 +500,103 @@ vector<Individual> oneptcx(Individual &ind1, vector<Individual> &pop){
         child_path1.insert(child_path1.end(), path2.begin()+cut_pt2, path2.end());
         child_path2.insert(child_path2.end(), path2.begin(), path2.begin()+cut_pt2);
         child_path2.insert(child_path2.end(), path1.begin()+cut_pt1, path1.end());
-
         int age = std::max(ind1.age, ind2.age);
         // New individuals.
-        Individual child1 = {child_path1, 0.0, 0.0, 0, 0.0, age, ind1.robotID};
-        Individual child2 = {child_path2, 0.0, 0.0, 0, 0.0, age, ind2.robotID};
+        Individual child1; child1.path=child_path1; child1.age=age; child1.robotID=ind1.robotID;
+        Individual child2; child2.path=child_path2; child2.age=age; child2.robotID=ind2.robotID;
         children = {child1, child2};
         //path_check(ind1, "cx0");
         //path_check(ind2, "cx1");
         //path_check(child1, "cx2");
         //path_check(child2, "cx3");
+    }else{
+        children = {ind1};
+        ofs_log << "    FAIL" << endl;
     }
     return children;
 }
 
+vector<Individual> oneptcx2(Individual &ind1, const vector<Individual> &pop){
+    int cut_pt1, cut_pt2;
+    vector<double> pt1, pt2;
+    Individual ind2;
+    vector<Individual> children;
+    double min_dist=PI/10;
+    int num=pop.size();
+
+    // Cut point
+    cut_pt1 = ind1.collision_points[0];
+    if (cut_pt1 == -1 || cut_pt1 == 0) cut_pt1 = get_rand_range_int(1, N_PTS-2);
+    pt1 = ind1.path[cut_pt1];
+
+    // Search the nearest point.
+    for (int i=0; i<num; i++){
+        if (pop[i].distance == ind1.distance) continue;
+        for (int j=0; j<N_PTS; j++){
+            pt2 = pop[i].path[j];
+            double dist = calcDistance(pt1, pt2);
+            if (dist < min_dist){
+                min_dist = dist;
+                ind2 = pop[i];
+                cut_pt2 = j;
+            }
+        }
+    }
+
+    // Swap.
+    if (ind2.path.size() != 0) {
+        vector<vector<double>> path1 = ind1.path;
+        vector<vector<double>> path2 = ind2.path;
+        vector<vector<double>> child_path1;
+        child_path1.insert(child_path1.end(), path1.begin(), path1.begin()+cut_pt1);
+        child_path1.insert(child_path1.end(), path2.begin()+cut_pt2, path2.end());
+        int age = std::max(ind1.age, ind2.age);
+        // New individuals.
+        Individual child; child.path=child_path1; child.age=age; child.robotID=ind1.robotID;
+        children.push_back(child);
+    }
+
+    // Cut point
+    cut_pt1 = ind1.collision_points[1];
+    if (cut_pt1 == -1 || cut_pt1 == 0) cut_pt1 = get_rand_range_int(1, N_PTS-2);
+    pt1 = ind1.path[cut_pt1];
+
+    // Search the nearest point.
+    for (int i=0; i<num; i++){
+        if (pop[i].distance == ind1.distance) continue;
+        for (int j=0; j<N_PTS; j++){
+            pt2 = pop[i].path[j];
+            double dist = calcDistance(pt1, pt2);
+            if (dist < min_dist){
+                min_dist = dist;
+                ind2 = pop[i];
+                cut_pt2 = j;
+            }
+        }
+    }
+
+    // Swap.
+    if (ind2.path.size() != 0) {
+        vector<vector<double>> path1 = ind1.path;
+        vector<vector<double>> path2 = ind2.path;
+        vector<vector<double>> child_path1;
+        child_path1.insert(child_path1.end(), path2.begin(), path2.begin()+cut_pt2);
+        child_path1.insert(child_path1.end(), path1.begin()+cut_pt1, path1.end());
+        int age = std::max(ind1.age, ind2.age);
+        // New individuals.
+        Individual child; child.path=child_path1; child.age=age; child.robotID=ind1.robotID;
+        children.push_back(child);
+    }
+
+    return children;
+}
 
 // -----------------------------------------------
 
 void calcDiversity(vector<Individual> &pop){
+    //double diversity_alpha = 0.5;
+    //double diversity_thresh = 1.0;
+
     //double sharing;
     int num = pop.size();
 
@@ -397,7 +619,6 @@ void calcDiversity(vector<Individual> &pop){
                 //pop[j].diversity += sharing;
                 pop[i].diversity += dist;
                 pop[j].diversity += dist;
-
             }
         }
     }

@@ -5,10 +5,25 @@
 using std::vector;
 using namespace Eigen;
 
-//vector<double>Lengths = {5.0, 5.0};
-//vector<double>Base = {3.0, 3.0};
+vector<double> start1 = {-2.0, -0.6};
+vector<double> goal1 = {3.5, 0.5};
+vector<double> base1 = {5.0, 5.0};
+vector<double> lengths1 = {5.0, 5.0};
+vector<double> start2 = {1.2, -0.6};
+vector<double> goal2 = {0.9, -0.8};
+vector<double> base2 = {-5.0, -5.0};
+vector<double> lengths2 = {5.0, 5.0};
 
+// Set robot parameter.
+Robot robot[2] =
+{
+    {base1, lengths1, start1, goal1},
+    {base2, lengths2, start2, goal2}
+};
 
+//robot[0].set_values(base1, lengths1, start1, goal1);
+//robot[1].set_values(base2, lengths2, start2, goal2);
+/*
 void Robot::set_values (vector<double> base,
                         vector<double> lengths,
                         vector<double> start,
@@ -18,6 +33,7 @@ void Robot::set_values (vector<double> base,
     Start = start;
     Goal = goal;
 }
+*/
 
 vector<vector<double>> Robot::forward_kinematics(vector<double>qlist){
 

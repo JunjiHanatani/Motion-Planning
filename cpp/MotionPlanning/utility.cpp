@@ -7,8 +7,8 @@ using std::vector;
 double PI=acos(-1);
 
 std::random_device seed_gen;
-std::mt19937 mt_engine(seed_gen());
-//std::mt19937 mt_engine(0);
+//std::mt19937 mt_engine(seed_gen());
+std::mt19937 mt_engine(4);
 int get_rand_range_int(int min_val, int max_val) {
     std::uniform_int_distribution<int> gen_rand_uni_int( min_val, max_val );
     return gen_rand_uni_int(mt_engine);
