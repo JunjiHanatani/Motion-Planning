@@ -6,13 +6,15 @@ using std::vector;
 class Robot {
 
   public:
+    vector<double>Base;
+    vector<double>Lengths;
     vector<double>Start;
     vector<double>Goal;
-    vector<double>Lengths;
-    vector<double>Base;
 
     vector< vector<double> >forward_kinematics(vector<double>);
-    void set_values(vector<double>, vector<double>, vector<double>, vector<double>);
+    //void set_values(vector<double>, vector<double>, vector<double>, vector<double>);
 };
+
+extern Robot robot[2];
 
 #endif

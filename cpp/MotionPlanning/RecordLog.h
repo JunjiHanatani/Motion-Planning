@@ -7,5 +7,6 @@
 void RecordLog(bool);
 void config_check(Individual, int);
 void path_check(Individual, std::string);
+extern std::ofstream ofs_log;
 
 #endif
