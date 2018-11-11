@@ -17,17 +17,20 @@ using std::vector;
 using std::string;
 
 double duration[5];
-vector<Individual> totalPOP1, totalPOP2;
 void alpsGA(vector<Individual>[] ,vector<Individual>[]);
 
 int main()
 {
-    // Create a folder for output files.
-    mkdir("log", 0775);
-
     //test();
 
+    // Create a folder for output files.
+    mkdir("log", 0775);
+    Timer tm;
+    vector<Individual> pops1[5];
+    vector<Individual> pops2[5];
+
     // Create initial populations.
+    ofs_log << " ----- INITIAL POPULATION ----- " <<endl;
     pops1[0] = createInitialPop(0, N_POP);
     pops2[0] = createInitialPop(1, N_POP);
 
@@ -35,33 +38,34 @@ int main()
     evaluate(pops1[0], pops2);
     evaluate(pops2[0], pops1);
 
-    totalPOP1 = pops1[0];
-    totalPOP2 = pops2[0];
-
-    //sort_pop(pops1[0]);
-    //sort_pop(pops2[0]);
+    sort_pop(pops1[0]);
+    sort_pop(pops2[0]);
 
     // Log
-    RecordLog(true);
+    ofs_log << "  OUTPUT" << endl;
+    RecordLog(pops1, pops2, true);
+    ofs_log << "END" << endl; ofs_log << endl;
 
     // Start co-evolution.
     for (gen=1; gen<=N_GEN; gen++){
         ofs_log << " ----- GENERATION: " << gen << " ----- " <<endl;
 
+        // ---------------------------------------
+        // ALPS Co-evolution
+        // ---------------------------------------
         if ((int)(gen/1)%2==0){
             alpsGA(pops1, pops2);
-
-            //totalPOP1.clear();
-            //for (int id=0; id<N_LAYERS; id++) totalPOP1.insert(totalPOP1.end(), pops1[id].begin(), pops1[id].end());
-            //sort_pop(totalPOP1);
-
         } else{
             alpsGA(pops2, pops1);
-
-            //totalPOP2.clear();
-            //for (int id=0; id<N_LAYERS; id++) totalPOP2.insert(totalPOP2.end(), pops2[id].begin(), pops2[id].end());
-            //sort_pop(totalPOP2);
         }
+
+        // ---------------------------------------
+        // Output
+        // ---------------------------------------
+        tm.restart();
+        ofs_log << "  OUTPUT" << endl;
+        RecordLog(pops1, pops2, true);
+        duration[4] += tm.elapsed(); tm.restart();
 
         ofs_log << "END" << endl; ofs_log << endl;
     }
@@ -152,13 +156,5 @@ void alpsGA(vector<Individual>pops[] ,vector<Individual>competitors[]){
     for (int i=0; i<N_LAYERS; i++) sort_pop(pops[i]);
 
     duration[3] += tm.elapsed();
-
-    // ---------------------------------------
-    // Output
-    // ---------------------------------------
-    tm.restart();
-    ofs_log << "  OUTPUT" << endl;
-    RecordLog(true);
-    duration[4] += tm.elapsed(); tm.restart();
 
 }

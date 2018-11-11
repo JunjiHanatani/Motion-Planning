@@ -32,8 +32,6 @@ struct Individual{
 };
 
 extern int N_POP, N_PTS, N_JOINT, N_GEN, N_ELITES, N_TOURNAMENT, N_LAYERS;
-extern vector<Individual> pops1[5];
-extern vector<Individual> pops2[5];
 extern int gen;
 
 // Create population

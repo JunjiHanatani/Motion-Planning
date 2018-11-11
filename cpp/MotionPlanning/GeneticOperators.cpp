@@ -14,7 +14,7 @@ using std::endl;;
 using namespace Eigen;
 
 int gen = 0;
-int N_GEN = 100;
+int N_GEN = 3000;
 int N_POP = 50;
 int N_SPLINE = 3;
 int N_FINE_SPLINE = 10;
@@ -26,9 +26,9 @@ int N_LAYERS = 5;
 int MAX_AGE[5] = {3, 6, 12, 24, 48};
 double P_MUT = 0.7;
 double RATE_OVERAGE = 0.2;
-
-vector<Individual> pops1[5];
-vector<Individual> pops2[5];
+double COLLISION_WEIGHT = 10.0;
+int COLLISION_CHECK_DIV = 10;
+double COLLISION_MARGIN = 0.5;
 
 // -----------------------------------------------
 // CREATE INITIAL POPULATION
@@ -96,20 +96,28 @@ void evaluate(vector<Individual>&pop, vector<Individual> competitors[]){
         if (competitors[i].size()!=0) best_inds.push_back(competitors[i][0]);
     };
 
+    // --- Calculate diversity.
     //calcDiversity(pop);
+
     for (int i=0; i<num; i++) {
-        //pop1[i].distance = calcPathLength(pop[i].path);
-        pop[i].distance = calcTravelLength(pop[i]);
+
+        // --- Calculate traveling distance (Select c-space or Cartesian space)
+        //pop1[i].distance = calcPathLength(pop[i].path);   // C-space
+        pop[i].distance = calcTravelLength(pop[i]);         // Cartesian space
+
         pop[i].fitness = 1e6;
         for(Individual best_ind: best_inds){
             int best_collision = calcCollision(pop[i], best_ind);
             double best_distance = std::max(pop[i].distance, best_ind.distance);
-            double best_fitness = best_distance + best_collision*10.0;
+            double best_fitness = best_distance + best_collision * COLLISION_WEIGHT;
+
             if (best_fitness < pop[i].fitness){
                 pop[i].collision = best_collision;
                 pop[i].fitness = best_fitness;
             }
         }
+
+        // --- Calculate subjective fitness.
         //pop[i].subfitness = calcSubFitness(pop[i], competitors);
     }
 }
@@ -155,9 +163,8 @@ double calcTravelLength(Individual &ind){
 }
 
 int calcCollision(Individual &ind1, Individual &ind2){
-    int DIV = 10;
-    vector<vector<double>> spline1 = ferguson_spline(ind1.path, DIV);
-    vector<vector<double>> spline2 = ferguson_spline(ind2.path, DIV);
+    vector<vector<double>> spline1 = ferguson_spline(ind1.path, COLLISION_CHECK_DIV);
+    vector<vector<double>> spline2 = ferguson_spline(ind2.path, COLLISION_CHECK_DIV);
     vector<double> cp;
     vector<vector<double>> config1, config2;
     vector<vector<double>> line1, line2;
@@ -168,13 +175,17 @@ int calcCollision(Individual &ind1, Individual &ind2){
     for (int i=0; i<num; i++){
         config1 = robot[ind1.robotID].forward_kinematics(spline1[i]);
         config2 = robot[ind2.robotID].forward_kinematics(spline2[i]);
+
         // Line pair.
         for (int j=0; j<N_JOINT; j++){
             for (int k=0; k<N_JOINT; k++){
+
                 line1={config1[j], config1[j+1]};
                 line2={config2[k], config2[k+1]};
+
                 // If rough check is true.
-                if (isCollisionRoughCheck(line1, line2)){
+                if (isCollisionRoughCheck(line1, line2, COLLISION_MARGIN)){
+
                     // Line-Line check.
                     if (isCollisionLineLine(line1, line2)){
                         collision_counter += 1;
@@ -182,25 +193,25 @@ int calcCollision(Individual &ind1, Individual &ind2){
                         goto NEXT;
                     }
                     // Line-Circle check
-                    if (isCollisionLineCircle(line1, line2[0], 1.0)){
+                    if (isCollisionLineCircle(line1, line2[0], COLLISION_MARGIN)){
                         collision_counter += 1;
                         cp.push_back(i);
                         goto NEXT;
                     }
                     // Line-Circle check
-                    if (isCollisionLineCircle(line1, line2[1], 1.0)){
+                    if (isCollisionLineCircle(line1, line2[1], COLLISION_MARGIN)){
                         collision_counter += 1;
                         cp.push_back(i);
                         goto NEXT;
                     }
                     // Line-Circle check
-                    if (isCollisionLineCircle(line2, line1[0], 1.0)){
+                    if (isCollisionLineCircle(line2, line1[0], COLLISION_MARGIN)){
                         collision_counter += 1;
                         cp.push_back(i);
                         goto NEXT;
                     }
                     // Line-Circle check
-                    if (isCollisionLineCircle(line2, line1[1], 1.0)){
+                    if (isCollisionLineCircle(line2, line1[1], COLLISION_MARGIN)){
                         collision_counter += 1;
                         cp.push_back(i);
                         goto NEXT;
@@ -212,12 +223,13 @@ int calcCollision(Individual &ind1, Individual &ind2){
         NEXT:;
     }
 
+
     if (cp.size() == 0){
         ind1.collision_points[0] = -1;
         ind1.collision_points[1] = -1;
     }else{
-        ind1.collision_points[0] = (int)cp[0]/DIV;
-        ind1.collision_points[1] = (int)cp[cp.size()-1]/DIV + 1;
+        ind1.collision_points[0] = (int)cp[0]/COLLISION_CHECK_DIV;
+        ind1.collision_points[1] = (int)cp[cp.size()-1]/COLLISION_CHECK_DIV + 1;
     }
 
     return collision_counter;
@@ -367,9 +379,18 @@ void agelayeredSelection(vector<Individual>pops[]){
             pops[id].insert(pops[id].end(), overages[id].begin(), overages[id].end());
         }
 
-        ofs_log << "TOTAL NUM OF POPULATION: " << pops[id].size() << endl;
-        ofs_log << "AGES: " << endl;
-        for (Individual ind:pops[id]) ofs_log << ind.age << " "; ofs_log << endl;
+        vector<double> age_list;
+        int min_age; int max_age;
+        if (id==0){min_age = 1;}else{min_age = MAX_AGE[id-1]+1;}
+        max_age = MAX_AGE[id];
+        for (Individual ind:pops[id]) age_list.push_back(ind.age);
+        ofs_log << "    LAYER: " << id << endl;
+        for (int age=min_age; age<=max_age; age++){
+            size_t n_count = std::count(age_list.begin(), age_list.end(), age);
+            ofs_log << "      AGE " << age << " : " << n_count <<endl;
+        }
+        ofs_log << "      TOTAL: " << pops[id].size() << endl;
+
     }
 }
 

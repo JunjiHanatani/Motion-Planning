@@ -11,26 +11,30 @@ http://www5d.biglobe.ne.jp/~tomoya03/shtml/algorithm/Intersection.htm
 http://mslabo.sakura.ne.jp/WordPress/make/processing
 */
 
-bool isCollisionRoughCheck(vector<vector<double>>line1, vector<vector<double>>line2){
+bool isCollisionRoughCheck(vector<vector<double>>line1, vector<vector<double>>line2, double margin){
 
     // Rough check in x-axis
     if (line1[0][0] >= line1[1][0]){
-        if ((line1[0][0] < line2[0][0] && line1[0][0] < line2[1][0]) || (line1[1][0] > line2[0][0] && line1[1][0] > line2[1][0])){
+        if ((line1[0][0] + margin < line2[0][0] - margin && line1[0][0] + margin < line2[1][0] - margin) ||
+            (line1[1][0] - margin > line2[0][0] + margin && line1[1][0] - margin > line2[1][0] + margin )){
             return false;
         }
     }else{
-        if ((line1[1][0] < line2[0][0] && line1[1][0] < line2[1][0]) || (line1[0][0] > line2[0][0] && line1[0][0] > line2[1][0])){
+        if ((line1[1][0] + margin < line2[0][0] - margin && line1[1][0] + margin < line2[1][0] - margin) ||
+            (line1[0][0] - margin > line2[0][0] + margin && line1[0][0] - margin > line2[1][0] + margin)){
             return false;
         }
     }
 
     // Rough check in y-axis
     if (line1[0][1] >= line1[1][1]){
-        if ((line1[0][1] < line2[0][1] && line1[0][1] < line2[1][1]) || (line1[1][1] > line2[0][1] && line1[1][1] > line2[1][1])){
+        if ((line1[0][1] + margin < line2[0][1] - margin && line1[0][1] + margin < line2[1][1] - margin) ||
+            (line1[1][1] - margin > line2[0][1] + margin && line1[1][1] - margin > line2[1][1] + margin )){
             return false;
         }
     }else{
-        if ((line1[1][1] < line2[0][1] && line1[1][1] < line2[1][1]) || (line1[0][1] > line2[0][1] && line1[0][1] > line2[1][1])){
+        if ((line1[1][1] + margin < line2[0][1] - margin && line1[1][1] + margin < line2[1][1] - margin) ||
+            (line1[0][1] - margin > line2[0][1] + margin && line1[0][1] - margin > line2[1][1] + margin)){
             return false;
         }
     }

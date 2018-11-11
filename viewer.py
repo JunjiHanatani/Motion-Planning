@@ -231,8 +231,10 @@ class LivePlotNotebook(object):
     url: https://gist.github.com/wassname/04e77eb821447705b399e8e7a6d082ce
     """
 
-    def __init__(self, world, dt=0.1):
-        self.dt = dt
+    def __init__(self, world=None, num=1, jupyter=False, colors=None,
+                 title="title", xlabel='x', ylabel='y', figsize=[8, 8]):
+
+        self.jupyter = jupyter
         self.world = world
         matplotlib.rcParams['font.size'] = 14
         matplotlib.rcParams['axes.titlesize'] = 18
@@ -244,51 +246,91 @@ class LivePlotNotebook(object):
         matplotlib.rcParams['legend.fontsize'] = 12
         matplotlib.rcParams['legend.edgecolor'] = 'k'
 
-        self.fig = plt.figure(figsize=[6, 6])
+        self.fig = plt.figure(figsize=figsize)
         self.ax = self.fig.add_subplot(111)
 
         # --- Set title
-        self.ax.set_title('2D path planning')
-        self.ax.set_xlabel('x')
-        self.ax.set_ylabel('y')
+        self.ax.set_title(title)
+        self.ax.set_xlabel(xlabel)
+        self.ax.set_ylabel(ylabel)
 
-        # --- Draw a frame
-        points = tuple([tuple(pt) for pt in world.frame])
-        poly = plt.Polygon(points, ec="#000000", fill=False)
-        self.ax.add_patch(poly)
+        if world is not None:
+            # --- Draw a frame
+            if world.frame is not None:
+                points = tuple([tuple(pt) for pt in world.frame])
+                poly = plt.Polygon(points, ec="#000000", fill=False)
+                self.ax.add_patch(poly)
+
+            # --- Draw Objects
+            if world.objects is not None:
+                self.object_box = []
+                for i, obj in enumerate(self.world.objects):
+                    points = tuple([tuple(pt) for pt in obj])
+                    poly = plt.Polygon(points, fc="#10101090")
+                    box = self.ax.add_patch(poly)
+                    self.object_box.append(box)
 
         # --- Set axis
-        self.ax.axis('equal')
+        # self.ax.axis('equal')
 
         # --- Set lines
-        # Population
-        self.line, = self.ax.plot(0.0, 0.0, marker='o')
+        # Paths
+        self.lines = []
+        for i in range(num):
+            if colors is None:
+                line, = self.ax.plot(0.0, 0.0, marker='o')
+            else:
+                line, = self.ax.plot(0.0, 0.0, marker='o', color=colors[i])
+            self.lines.append(line)
 
         # Trajectory
-        self.traj_line, = self.ax.plot(0.0, 0.0, marker=None)
+        self.traj_lines = []
+        for i in range(num):
+            if colors is None:
+                line, = self.ax.plot(0.0, 0.0, marker=None)
+            else:
+                line, = self.ax.plot(0.0, 0.0, marker=None, color=colors[i])
+            self.traj_lines.append(line)
 
-        # Objects
-        self.object_box = []
-        for i, obj in enumerate(self.world.objects):
-            points = tuple([tuple(pt) for pt in obj])
-            poly = plt.Polygon(points, fc="#10101090")
-            box = self.ax.add_patch(poly)
-            self.object_box.append(box)
+        # Points
+        self.points = []
+        for i in range(num):
+            if colors is None:
+                line, = self.ax.plot(0.0, 0.0, marker='o', linestyle='None')
+            else:
+                line, = self.ax.plot(0.0, 0.0, marker='o', linestyle='None',
+                                     color=colors[i])
+            self.points.append(line)
 
-    def update(self, path, traj):
+    def update(self, path_list=None, traj_list=None, pts_list=None,
+               xlim=None, ylim=None, dt=0.1):
 
         # Population
-        self.line.set_data(path[:, 0], path[:, 1])
+        if path_list is not None:
+            for i, path in enumerate(path_list):
+                self.lines[i].set_data(path[:, 0], path[:, 1])
 
         # Trajectory
-        self.traj_line.set_data(traj[:, 0], traj[:, 1])
+        if traj_list is not None:
+            for i, traj in enumerate(traj_list):
+                self.traj_lines[i].set_data(traj[:, 0], traj[:, 1])
+
+        # Trajectory
+        if pts_list is not None:
+            for i, pts in enumerate(pts_list):
+                self.points[i].set_data(pts[:, 0], pts[:, 1])
+
+        if xlim is not None:
+            self.ax.set_xlim(xlim)
+        if ylim is not None:
+            self.ax.set_ylim(ylim)
 
         # Objects
-        for box, obj in zip(self.object_box, self.world.objects):
-            points = [pt for pt in obj]
-            box.set_xy(points)
+        # for box, obj in zip(self.object_box, self.world.objects):
+        #    points = [pt for pt in obj]
+        #    box.set_xy(points)
 
-        if self.dt is None:
+        if self.jupyter:
             self.fig.canvas.draw()
         else:
-            plt.pause(self.dt)
+            plt.pause(dt)

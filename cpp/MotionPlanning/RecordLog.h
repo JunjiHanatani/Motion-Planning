@@ -4,7 +4,7 @@
 #include <string>
 #include "GeneticOperators.h"
 
-void RecordLog(bool);
+void RecordLog(vector<Individual>[], vector<Individual>[], bool);
 void config_check(Individual, int);
 void path_check(Individual, std::string);
 extern std::ofstream ofs_log;

@@ -13,7 +13,6 @@ class CollisionChecker():
         num_grid = np.shape(world.objects)
         self.frame_max = np.max(world.frame, axis=0)
         self.frame_min = np.min(world.frame, axis=0)
-        self.grid_delta = (self.frame_max - self.frame_min) / num_grid
         self.delta = delta
 
         if self.object_type == 'poly':
@@ -25,6 +24,7 @@ class CollisionChecker():
         elif self.object_type == 'grid':
             if verbose:
                 print('- Object type: grid')
+            self.grid_delta = (self.frame_max - self.frame_min) / num_grid
             self.point_validation = self.point_validation_for_grid
             self.line_validation = self.line_validation_for_grid
 

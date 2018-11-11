@@ -405,7 +405,15 @@ if __name__ == '__main__':
     world_margin = world.mcopy(rate=1.05)
 
     # Robot
-    robot2R = RobotArm(base=[0, 0], lengths=[3.0, 5.0])
+    robot_parameter = {'base': [0, 0],
+                       'length': [3.0, 5.0],
+                       'mass': [None, None],
+                       'I': [None, None],
+                       'r': [None, None],
+                       'umax': [None, None],
+                       'umin': [None, None]}
+
+    robot2R = RobotArm(robot_parameter)
     robot2R.start = np.array([0.0, 2.0])
     robot2R.goal = np.array([-0.6, 1.0])
 
@@ -433,5 +441,5 @@ if __name__ == '__main__':
     trajectory = np.array([config[2] for config in configs])
     liveplot = LivePlotNotebook(world, dt=0.01)
     for i in range(len(configs)):
-        liveplot.update(configs[i], trajectory[:i+1])
+        liveplot.update(configs[i], trajectory[:i + 1])
     plt.show()

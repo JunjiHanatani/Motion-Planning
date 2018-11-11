@@ -157,6 +157,6 @@ def ferguson_spline(path, num=None, s=None):
         s_vec = np.matrix([s**3, s**2, s**1, s**0])
         vec = np.matrix([p0, v0, p1, v1])
         q_add = s_vec.T * trans_matrix * vec
-        q = np.vstack((q, q_add))
-
+        q = np.vstack((q, q_add[:-1]))
+    q = np.vstack((q, path[-1]))
     return np.array(q)
