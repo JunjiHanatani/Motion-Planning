@@ -1,0 +1,14 @@
+\contentsline {section}{\numberline {1}Introduction}{2}{section.1}
+\contentsline {section}{\numberline {2}Related works}{3}{section.2}
+\contentsline {subsection}{\numberline {2.1}Motion Planning}{3}{subsection.2.1}
+\contentsline {subsection}{\numberline {2.2}Evolutinary Planner}{4}{subsection.2.2}
+\contentsline {section}{\numberline {3}Methods}{6}{section.3}
+\contentsline {subsection}{\numberline {3.1}Problem formulation}{6}{subsection.3.1}
+\contentsline {subsection}{\numberline {3.2}Co-evolutionary Genetic Algorithm}{8}{subsection.3.2}
+\contentsline {subsubsection}{\numberline {3.2.1}Representation for robot paths}{8}{subsubsection.3.2.1}
+\contentsline {subsubsection}{\numberline {3.2.2}Initial population}{9}{subsubsection.3.2.2}
+\contentsline {subsubsection}{\numberline {3.2.3}Genetic operators and selection mechanisms}{9}{subsubsection.3.2.3}
+\contentsline {subsubsection}{\numberline {3.2.4}Diversity maintenance}{12}{subsubsection.3.2.4}
+\contentsline {subsubsection}{\numberline {3.2.5}Subjective fitness for co-evolution}{12}{subsubsection.3.2.5}
+\contentsline {section}{\numberline {4}Simulation results and discussion}{13}{section.4}
+\contentsline {section}{\numberline {5}Conclusion}{19}{section.5}
